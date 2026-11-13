@@ -123,7 +123,7 @@ static bool check_codepoint_allocations(ASS_Shaper *shaper, size_t new_size)
  */
 static bool check_par_allocations(ASS_Shaper *shaper, size_t n_pars)
 {
-    if (shaper->whole_text_layout && n_pars > shaper->n_pars) {
+    if (n_pars > shaper->n_pars) {
         if (!ASS_REALLOC_ARRAY(shaper->pbase_dir, n_pars))
             return false;
         shaper->n_pars = n_pars;
@@ -1003,11 +1003,10 @@ bool ass_shaper_shape(ASS_Shaper *shaper, TextInfo *text_info)
     last_break = 0;
     pdir = shaper->pbase_dir;
     for (i = 0; i < text_info->length; i++) {
-        // Embedding levels must be calculated one bidi "paragraph" at a time
-        if (i == text_info->length - 1 ||
-                shaper->ctypes[i] == FRIBIDI_TYPE_BS ||
-                (!shaper->whole_text_layout &&
-                    (glyphs[i + 1].starts_new_run || glyphs[i].hspacing))) {
+        // Bidi is independent of shaping runs: override tags and karaoke
+        // boundaries must not turn each fragment into its own paragraph.
+        // Embedding levels must be calculated one bidi "paragraph" at a time.
+        if (i == text_info->length - 1 || shaper->ctypes[i] == FRIBIDI_TYPE_BS) {
             dir = shaper->base_direction;
 #ifdef USE_FRIBIDI_EX_API
             FriBidiBracketType *btypes = NULL;
@@ -1023,8 +1022,7 @@ bool ass_shaper_shape(ASS_Shaper *shaper, TextInfo *text_info)
             if (ret == 0)
                 return false;
             last_break = i + 1;
-            if (shaper->whole_text_layout)
-                *pdir++ = dir;
+            *pdir++ = dir;
         }
     }
 
@@ -1116,19 +1114,17 @@ FriBidiStrIndex *ass_shaper_reorder(ASS_Shaper *shaper, TextInfo *text_info)
     for (i = 0; i < text_info->length; i++)
         shaper->cmap[i] = i;
 
-    // Create reorder map line-by-line or run-by-run
+    // Create reorder map line-by-line. Bidi must span the whole bidi
+    // paragraph even when it is split into several shaping runs.
     int last_break = 0;
-    FriBidiParType *pdir = shaper->whole_text_layout ?
-        shaper->pbase_dir : &shaper->base_direction;
+    FriBidiParType *pdir = shaper->pbase_dir;
     GlyphInfo *glyphs = text_info->glyphs;
     for (i = 0; i < text_info->length; i++) {
         // Bidi "paragraph separators" may occur between line breaks:
         // U+001C..1E even with ASS_FEATURE_WRAP_UNICODE,
         // or U+000D, U+0085, U+2029 only without it
         if (i == text_info->length - 1 || glyphs[i + 1].linebreak ||
-                shaper->ctypes[i] == FRIBIDI_TYPE_BS ||
-                (!shaper->whole_text_layout &&
-                    (glyphs[i + 1].starts_new_run || glyphs[i].hspacing))) {
+                shaper->ctypes[i] == FRIBIDI_TYPE_BS) {
             ret = fribidi_reorder_line(0,
                     shaper->ctypes, i - last_break + 1, last_break, *pdir,
                     shaper->emblevels, NULL,
@@ -1137,7 +1133,7 @@ FriBidiStrIndex *ass_shaper_reorder(ASS_Shaper *shaper, TextInfo *text_info)
                 return NULL;
 
             last_break = i + 1;
-            if (shaper->whole_text_layout && shaper->ctypes[i] == FRIBIDI_TYPE_BS)
+            if (shaper->ctypes[i] == FRIBIDI_TYPE_BS)
                 pdir++;
         }
     }

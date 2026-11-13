@@ -255,16 +255,13 @@ typedef enum {
 
     /**
      * When this feature is disabled, text is split into VSFilter-compatible
-     * segments and text in each segment is processed in isolation.
-     * Notably, this includes running the Unicode Bidirectional
-     * Algorithm and shaping the text within each run separately.
-     * The individual runs are then laid out left-to-right,
-     * even if they contain right-to-left text.
+     * segments for shaping, and text in each segment is shaped in isolation.
+     * The Unicode Bidirectional Algorithm is still applied to the whole
+     * bidi paragraph, so the segments are reordered as a single line.
      *
      * When this feature is enabled, each event's text is processed as a whole
-     * (as far as possible). In particular, the Unicode Bidirectional
-     * Algorithm is run on the whole text, and text is shaped across
-     * override tags.
+     * (as far as possible). In particular, text is shaped across override
+     * tags.
      *
      * This is incompatible with VSFilter and disabled by default.
      *
